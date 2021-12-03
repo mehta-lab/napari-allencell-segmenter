@@ -18,7 +18,7 @@ requirements = [
     "napari-plugin-engine>=0.1.4",
     "numpy",
     "aicssegmentation ~= 0.4.1",
-    "magicgui >= 0.2.9",
+    "magicgui>=0.3.3",
     "aicsimageio ~= 4.0.5",
     "opencv-python-headless>=4.5.1",
     "pyqt5 == 5.15.4",

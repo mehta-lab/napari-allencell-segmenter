@@ -115,6 +115,9 @@ setup(
         "napari.plugin": [
             "napari-allencell-segmenter = napari_allencell_segmenter",
         ],
+        'console_scripts': [
+                'launch = napari_allencell_segmenter.launch_napari:main'
+        ]
     },
     # Do not edit this string manually, always use bumpversion
     # Details in CONTRIBUTING.rst

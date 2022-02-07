@@ -1,8 +1,7 @@
 # Hook specifications: https://napari.org/docs/dev/plugins/hook_specifications.html
 import napari
-
 from napari_allencell_segmenter.core.application import Application
-# from napari_plugin_engine import napari_hook_implementation
+from napari_plugin_engine import napari_hook_implementation
 from qtpy.QtWidgets import QWidget, QVBoxLayout, QSizePolicy
 import dask.array as da
 from waveorder.io import WaveorderReader
@@ -52,18 +51,18 @@ def ome_zarr_reader(path):
         meta = dict()
         name = names[pos]
         meta['name'] = name
-        results.append((da.from_zarr(reader.get_zarr(pos)), meta))
+        results.append((reader.get_zarr(pos), meta))
 
     return results
 
 
+@napari_hook_implementation
 def napari_get_reader(path: str):
-    print('here')
     """Returns a reader for supported paths that include IDR ID.
     - URL of the form: https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/ID.zarr/
     """
 
-    if isinstance(path, str) and path.endswith(".zarr"):
+    if isinstance(path, str):
         # If we recognize the format, we return the actual reader function
         return ome_zarr_reader
 
@@ -71,6 +70,6 @@ def napari_get_reader(path: str):
     else:
         return None
 
-
+@napari_hook_implementation
 def napari_experimental_provide_dock_widget():  # pragma: no-cover
     return [(WorkflowEditorWidget, {"name": "Workflow editor"}), (BatchProcessingWidget, {"name": "Batch processing"})]

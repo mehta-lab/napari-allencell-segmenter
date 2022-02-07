@@ -1,10 +1,11 @@
 import numpy as np
 import logging
-
+import zarr
 from typing import List
 from aicsimageio import AICSImage
 from napari.layers import Layer
 from napari_allencell_segmenter.model.channel import Channel
+from waveorder.io.reader import WaveorderReader
 
 log = logging.getLogger(__name__)
 
@@ -37,28 +38,46 @@ class LayerReader:
         return self._get_channels_default(layer)
 
     def _get_channels_default(self, layer: Layer) -> List[Channel]:
-        if len(layer.data.shape) == 6:
-            # Has scenes
-            image_from_layer = [layer.data[i, :, :, :, :, :] for i in range(layer.data.shape[0])]
+        if '.zarr' in layer.source.path:
+            data = WaveorderReader(layer.source.path, 'zarr')
+
+            channels = []
+            for idx, name in enumerate(data.channel_names):
+                channels.append(Channel(idx, name))
         else:
-            image_from_layer = layer.data
-        img = AICSImage(image_from_layer)  # gives us a 6D image#
-        img.set_scene(0)
+            if len(layer.data.shape) == 6:
+                # Has scenes
+                image_from_layer = [layer.data[i, :, :, :, :, :] for i in range(layer.data.shape[0])]
+            else:
+                image_from_layer = layer.data
+            img = AICSImage(image_from_layer)  # gives us a 6D image#
+            img.set_scene(0)
 
-        index_c = img.dims.order.index("C")
+            index_c = img.dims.order.index("C")
 
-        channels = list()
-        for index in range(img.shape[index_c]):
-            channels.append(Channel(index))
+            channels = list()
+            for index in range(img.shape[index_c]):
+                channels.append(Channel(index))
+
         return channels
 
     def _get_channels_from_path(self, image_path: str) -> List[Channel]:
-        img = AICSImage(image_path)
-        img.set_scene(0)
 
-        channels = list()
-        for index, name in enumerate(img.channel_names):
-            channels.append(Channel(index, name))
+        if '.zarr' in image_path:
+            data = WaveorderReader(image_path, 'zarr')
+
+            channels = []
+            for idx, name in enumerate(data.channel_names):
+                channels.append(Channel(idx, name))
+
+        else:
+            img = AICSImage(image_path)
+            img.set_scene(0)
+
+            channels = list()
+            for index, name in enumerate(img.channel_names):
+                channels.append(Channel(index, name))
+
         return channels
 
     def get_channel_data(self, channel_index: int, layer: Layer) -> np.ndarray:
@@ -76,7 +95,7 @@ class LayerReader:
 
         if self._should_read_from_path(layer):
             try:
-                return self._get_channel_data_from_path(channel_index, layer.source.path)
+                return self._get_channel_data_from_path(channel_index, layer.source.path, layer)
             except Exception as ex:
                 log.warning(
                     "Could not read image layer from source path even though a source path was provided."
@@ -87,23 +106,46 @@ class LayerReader:
         return self._get_channel_data_default(channel_index, layer)
 
     def _get_channel_data_default(self, channel_index: int, layer: Layer):
-        if len(layer.data.shape) >= 6:
-            # Has scenes
-            image_from_layer = [layer.data[i, :, :, :, :, :] for i in range(layer.data.shape[0])]
+        if '.zarr' in layer.source.path:
+            reader = WaveorderReader(layer.source.path, 'zarr')
+
+            pos_idx = 0
+            for idx in range(reader.get_num_positions()):
+                if layer.name in reader.reader.position_map[idx]['name']:
+                    pos_idx = idx
+
+            return reader.get_zarr(pos_idx)[0, channel_index]
         else:
-            image_from_layer = layer.data
+            if len(layer.data.shape) >= 6:
+                # Has scenes
+                image_from_layer = [layer.data[i, :, :, :, :, :] for i in range(layer.data.shape[0])]
+            else:
+                image_from_layer = layer.data
 
-        img = AICSImage(image_from_layer)  # gives us a 6D image
+            img = AICSImage(image_from_layer)  # gives us a 6D image
 
-        # use get_image_data() to parse out ZYX dimensions
-        # segmenter requries 3D images.
-        img.set_scene(0)
-        return img.get_image_data("ZYX", T=0, C=channel_index)
+            # use get_image_data() to parse out ZYX dimensions
+            # segmenter requries 3D images.
+            img.set_scene(0)
+            return img.get_image_data("ZYX", T=0, C=channel_index)
 
-    def _get_channel_data_from_path(self, channel_index: int, image_path: str):
-        img = AICSImage(image_path)
-        img.set_scene(0)
-        return img.get_image_data("ZYX", T=0, C=channel_index)
+    def _get_channel_data_from_path(self, channel_index: int, image_path: str, layer):
+
+        if '.zarr' in image_path:
+            reader = WaveorderReader(image_path, 'zarr')
+
+            pos_idx = 0
+            for idx in range(reader.get_num_positions()):
+                print(reader.reader.position_map[idx])
+                if layer.name in reader.reader.position_map[idx]['name']:
+                    pos_idx = idx
+
+            return reader.get_zarr(pos_idx)[0, channel_index]
+
+        else:
+            img = AICSImage(image_path)
+            img.set_scene(0)
+            return img.get_image_data("ZYX", T=0, C=channel_index)
 
     def _should_read_from_path(self, layer: Layer):
         if layer.source is None:
